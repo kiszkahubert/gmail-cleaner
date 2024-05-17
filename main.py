@@ -6,11 +6,10 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-# If modifying these scopes, delete the file token.json.
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SCOPES = ["https://mail.google.com/"]
 
 
-def main():
+def main(email):
     creds = None
     if os.path.exists("token.json"):
         creds = Credentials.from_authorized_user_file("token.json", SCOPES)
@@ -24,21 +23,28 @@ def main():
             creds = flow.run_local_server(port=0)
         with open("token.json", "w") as token:
             token.write(creds.to_json())
-
     try:
         service = build("gmail", "v1", credentials=creds)
-        results = service.users().labels().list(userId="me").execute()
-        labels = results.get("labels", [])
-        if not labels:
-            print("No labels found.")
-            return
-        print("Labels:")
-        for label in labels:
-            print(label["name"])
-
+        delete_emails(service,email)
     except HttpError as error:
         print(error)
 
+def delete_emails(service, email):
+    try:
+        page_token = None
+        while True:
+            results = service.users().messages().list(userId='me', q=f"from:{email}", pageToken=page_token).execute()
+            messages = results.get('messages', [])
+            for message in messages:
+                service.users().messages().delete(userId='me', id=message['id']).execute()
+            if 'nextPageToken' in results:
+                page_token = results['nextPageToken']
+            else:
+                break
+        print(f"deleted mails from {email}.")
+    except HttpError as error:
+        print(error)
 
 if __name__ == "__main__":
-    main()
+    email = input("Please insert from which email messages should be deleted")
+    main(email)
